@@ -1,0 +1,45 @@
+# LaTeX compilation artifacts
+/tango.pdf
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.loa
+*.synctex
+*.synctex.gz
+*.dvi
+*.xdv
+
+# Bibliography, index, and glossary intermediates
+*.bcf
+*.run.xml
+*.idx
+*.ind
+*.ilg
+*.acn
+*.acr
+*.alg
+*.glg
+*.glo
+*.gls
+*.glsdefs
+*.ist
+
+# Generated output directories
+/tmp/
+/output/
+/build/
+/.codex-slide-build/
+
+# macOS metadata and editor backups
+.DS_Store
+._*
+*~
+*.swp
+*.swo

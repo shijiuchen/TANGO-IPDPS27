@@ -1,0 +1,30 @@
+% !TeX root = ../tango.tex
+\section{Implementation of TANGO}
+\label{sec:implementation-of-tango}
+
+\tango{} is implemented on top of vLLM 0.17.0 by extending its request admission path and scheduler.
+The dispatcher and allocator run in the CPU-side scheduling loop and produce per-request token allocations for each engine step.
+The resulting batch is passed to vLLM through its existing scheduler--executor interface, reusing continuous batching, chunked prefill, PagedAttention-based KV-cache management, tensor parallelism, sampling, and streaming output.
+
+\textbf{SLO Metadata and Runtime State:}
+We extend request admission to carry two optional SLO fields, TTFT and TPOT, in milliseconds.
+A missing SLO is treated as an absent constraint, allowing best-effort requests to use the same serving path.
+Alongside these fields, the scheduler maintains each request's arrival timestamp, prompt length, computed-token progress, output-token count, and latest output timestamp in host memory.
+These fields are updated together with vLLM's request state after each engine step.
+The first emitted token activates the TPOT objective, and subsequent token timestamps advance the next-token deadline.
+
+\textbf{Queue and Preemption Hooks:}
+We add queue and preemption hooks to vLLM's waiting-request admission path.
+The queue hook applies the phase-aware priority and tie-breaking rules in Section~\ref{sec:deadline-aware-request-dispatcher}.
+On KV-cache allocation failure, the preemption hook selects the running request with the latest deadline and requires the waiting request's deadline to be strictly earlier.
+If permitted, vLLM reclaims the victim's KV blocks, moves it from \texttt{RUNNING} to \texttt{WAITING}, and retries allocation.
+The victim keeps its SLOs, output progress, and the timestamps used to construct its deadline.
+
+\textbf{Per-Step Token Allocation:}
+We fit the step-time model coefficients from offline profiling for the deployed model and hardware configuration.
+At each iteration boundary, the allocator summarizes the active decode workload and collects its next-token deadlines from scheduler-maintained state.
+It then establishes the time budget using the percentile policy in Section~\ref{sec:step-time-model-guided-token-allocator}.
+As the scheduler processes ongoing prefill requests and admits waiting requests, their chunks share this budget and the engine's maximum per-step token capacity.
+The allocator updates the cumulative prefill token count and attention work after each allocation, using the candidate's chunk length and already-computed context length.
+A chunk that exceeds either limit is truncated to its largest feasible size; unallocated tokens remain for later steps.
+The resulting token allocations are forwarded to the executor through the standard scheduling output.
